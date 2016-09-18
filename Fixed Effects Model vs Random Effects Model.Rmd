@@ -1,0 +1,110 @@
+---
+title: "Fixed Effects Model vs Random Effects Model"
+date: "September 18, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(data.table)
+library(plm)
+library(plyr)
+library(doBy)
+
+vars1 <- c("panelwave", "attend", "childs", "idnum", "numkids", "marital")
+
+ds2 <- data.table::fread(
+  file.choose(), 
+  sep = ",",
+  select = vars1,
+  data.table = FALSE)
+```
+
+### *Research Topic*
+
+I would like to study if marriage and children make people more engaged in religious service. Alternatively speaking, I would like to know if people go to religious service more frequently after they get married and have children.
+
+Marriage and having children make people spending more time on family life, such as staying together with family on weekends and holidays. A religious service is a good option for the family to spend time together and meet new people living nearby. Therefore, I believe that marriage and number of children are positively related to one's attendance at religious service.
+
+### *Data*
+
+I used three variables from General Social Survey (GSS) in my model.
+
+The dependent variable is attend, question "how often do you attend religious services". Answers range from "never" to "more than once a week". 
+
+![](GSS II 1.png)
+
+I have two independent variables. The first one is marital status. I re-coded this variable to make people married as 1 and others as 0. About half of interviewees are married.
+
+![](GSS II 2.png)
+
+```{r}
+ds2$married <- ifelse(ds2$marital == 1,1,0)
+table(ds2$married)
+```
+
+The second one is how many children do you have.
+
+![](GSS II 3.png)
+
+### *Descriptive Statistics*
+
+```{r}
+summaryBy(married~attend, data=ds2, FUN=c(mean, sd), na.rm=T)
+summaryBy(childs~attend, data=ds2, FUN=c(mean, sd), na.rm=T)
+```
+
+From the table above, we can see the frequency of one attends religious service increases when marriage or number of children increases. Therefore, we can tell that marriage and number of children can be good predictors to one's attendance at religious service, and expect positive relationship between both independent variables to dependent variable.
+
+### *Model and Analysis*
+
+ We start from a naïve multiple-regression model. 
+ 
+```{r}
+ ols = plm(attend~ married + childs + as.factor(panelwave) , index = c("idnum", "panelwave"), ds2, model="pooling")
+summary(ols)
+```
+
+1.	Married people attend religious service 0.68 units higher than others on average, net of the time trend. This coefficient is statistically significant.
+
+2.	One more child lead to 0.217 units more religious service on average, net of the time trend. This coefficient is statistically significant.
+
+The outputs of the naïve multiple-regression model are in line with my expectations. Both marriage and number of children are positively related to attendance at religious services. 
+
+However, the naïve multiple-regression model is unable to deal with endogeneity issue, such as possible omitted variable bias. For example, maybe people frequently attending religious service are fundamentally different from people who do not attend religious service, such as race, socioeconomic status or education level. Perhaps people from high socioeconomic status family are more likely to attend religious service than people from low socioeconomic status family. 
+
+Thus, omitted variables are correlated to variables in this model and may cause biased estimation. Therefore, the relationship between the independent variables and dependent variable might be questionable in the naïve regression model because of omitted variable bias. 
+
+Fixed effects model can overcome this issue because it assumes that omitted variables are correlated with the observed variables in the model. Any changes in the dependent variable are only caused by variables other than time-invariant variables such as gender and race.
+
+The followings are the outputs of fixed effects model.
+```{r}
+fe =  plm(attend~ married + childs + as.factor(panelwave), index = c("idnum", "panelwave"), ds2, model="within")
+summary(fe)
+```
+
+1.	Married people attend religious service 0.069457 units higher than others on average, net of the time trend. This coefficient is not statistically significant.
+
+2.	One more child lead to 0.000035282 units fewer religious service on average, net of the time trend. This coefficient is not statistically significant.
+
+The outputs of fixed effects model are obviously different from the outputs of the OLS model I have run at the beginning. The impact of number of children on religious service becomes negative, even though the coefficient is very small. The coefficient of marriage decreases largely from 0.68 to 0.069. Moreover, both coefficients become statistically insignificant. The impacts of marriage and number of children on religious service are both diminished after assuming omitted variables are correlated to observed variables. 
+
+Also, I run a random effects model.
+
+```{r}
+re = plm(attend~ married + childs + as.factor(panelwave), index = c("idnum", "panelwave"), ds2, model="random")
+summary(re)
+```
+
+1.	Married people attend religious service 0.40 units higher than others on average, net of the time trend. This coefficient is statistically significant.
+
+2.	One more child lead to 0.163 units more religious service on average, net of the time trend. This coefficient is statistically significant.
+
+The outputs of the random effects model are more consistent with the outputs of the OLS model. This is because the assumption of random effects model, omitted variables are uncorrelated with observed variables, is very similar to the assumption of OLS model. 
+
+Here is the Hausman test to compare the fixed effects model and the random effects model above.
+
+```{r}
+phtest(fe, re)
+```
+
+By the result of Hausman test that P-value is small enough, we are confident to reject the null hypothesis that coefficients between these two models are same. Therefore, we should use fixed effects model in this case since the coefficients between two models are different and fixed effects model is more consistent. This result indicates that it is likely omitted variables, such as race, gender, SES, are correlated to attendance at religious service and we should consider the impacts of these omitted variables as well.
